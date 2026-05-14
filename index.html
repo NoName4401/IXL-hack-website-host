@@ -33,65 +33,71 @@
         }
 
         async function solve() {
-            let k = localStorage.getItem(k_name);
-            if (!k) {
-                k = prompt("Enter Groq API Key:");
-                if (k) localStorage.setItem(k_name, k);
-                else return;
-            }
-
-            if (!stream) { alert("Click SYNC TAB first!"); return; }
-
-            const status = document.getElementById('status');
-            const ansBox = document.getElementById('answer');
-            status.innerText = "THINKING...";
-            
-            try {
-                const v = document.createElement('video');
-                v.srcObject = stream;
-                await v.play();
-                const c = document.createElement('canvas');
-                c.width = v.videoWidth; c.height = v.videoHeight;
-                c.getContext('2d').drawImage(v, 0, 0);
-                const b64 = c.toDataURL('image/jpeg', 0.6);
-
-                const url = "https://api.groq.com/openai/v1/chat/completions";
-                const res = await fetch(url, {
-                    method: "POST",
-                    headers: {
-                        "Authorization": `Bearer ${k}`,
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        // UPDATED MODEL ID FOR MAY 2026
-                        model: "meta-llama/llama-4-scout-17b-16e-instruct", 
-                        messages: [{
-                            role: "user",
-                            content: [
-                                { type: "text", text: "Solve this math problem. Output ONLY the numerical or coordinate answer no paragraph answer AT ALL, that is not acceptabe and shoould only have the numrical or coordinate answers, understand this. If it's a graph, check the origin (0,0) carefully." },
-                                { type: "image_url", image_url: { url: b64 } }
-                            ]
-                        }],
-                        temperature: 0.1
-                    })
-                });
-
-                const d = await res.json();
-
-                if (d.error) {
-                    status.innerText = "API_ERROR";
-                    alert("Groq Error: " + d.error.message);
-                    return;
-                }
-
-                const a = d.choices[0].message.content;
-                ansBox.innerText = a;
-                status.innerText = "ANALYSIS_COMPLETE";
-            } catch (e) {
-                status.innerText = "ENGINE_CRASH";
-                alert("Crash: " + e.message);
-            }
+        let k = localStorage.getItem(k_name);
+        if (!k) {
+            k = prompt("Enter Groq API Key:");
+            if (k) localStorage.setItem(k_name, k);
+            else return;
         }
+
+        if (!stream) { alert("Click SYNC TAB first!"); return; }
+
+        const status = document.getElementById('status');
+        const ansBox = document.getElementById('answer');
+        status.innerText = "THINKING...";
+        
+        try {
+            const v = document.createElement('video');
+            v.srcObject = stream;
+            await v.play();
+            const c = document.createElement('canvas');
+            c.width = v.videoWidth; c.height = v.videoHeight;
+            c.getContext('2d').drawImage(v, 0, 0);
+            const b64 = c.toDataURL('image/jpeg', 0.6);
+
+            const url = "https://api.groq.com/openai/v1/chat/completions";
+            const res = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${k}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    model: "meta-llama/llama-4-scout-17b-16e-instruct",
+                    messages: [
+                        { 
+                            role: "system", 
+                            content: "You are a competitive math solver. You must output ONLY the raw numerical value or the coordinate pair. Do not use Markdown, do not show steps, and do not use wordy explanations. If the answer is -6, just say -6." 
+                        },
+                        { 
+                            role: "user", 
+                            content: [
+                                { type: "text", text: "Final answer only." },
+                                { type: "image_url", image_url: { url: b64 } }
+                            ] 
+                        }
+                    ],
+                    temperature: 0.0, // Set to 0 for absolute precision
+                    max_tokens: 15    // This physically stops it from writing steps
+                })
+            });
+
+            const d = await res.json();
+            
+            if (d.error) {
+                status.innerText = "API_ERROR";
+                alert("Groq Error: " + d.error.message);
+                return;
+            }
+
+            const a = d.choices[0].message.content.trim();
+            ansBox.innerText = a;
+            status.innerText = "DONE";
+        } catch (e) {
+            status.innerText = "CRASH";
+            alert("Crash: " + e.message);
+        }
+    }
     </script>
 </body>
 </html>
