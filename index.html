@@ -14,7 +14,7 @@
 </head>
 <body>
     <div id="box">
-        <div class="stealth">CORE_ENGINE_V2.1</div>
+        <div class="stealth">GROQ_ENGINE_V2.2</div>
         <div id="status">SCANNER_READY</div>
         <button onclick="startCapture()">SYNC TAB</button>
         <button onclick="solve()">SOLVE_FRAME</button>
@@ -23,7 +23,7 @@
 
     <script>
         let stream = null;
-        const k_name = 'nn_engine_key';
+        const k_name = 'nn_groq_key';
 
         async function startCapture() {
             try {
@@ -35,7 +35,7 @@
         async function solve() {
             let k = localStorage.getItem(k_name);
             if (!k) {
-                k = prompt("Enter Engine Key:");
+                k = prompt("Enter Groq API Key:");
                 if (k) localStorage.setItem(k_name, k);
                 else return;
             }
@@ -53,40 +53,37 @@
                 const c = document.createElement('canvas');
                 c.width = v.videoWidth; c.height = v.videoHeight;
                 c.getContext('2d').drawImage(v, 0, 0);
-                const b64 = c.toDataURL('image/jpeg', 0.6).split(',')[1];
+                const b64 = c.toDataURL('image/jpeg', 0.6);
 
-                const promptText = "Solve this math problem. Output ONLY the answer. For graphs, trace axes from (0,0) carefully.";
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${k}`;
-                
+                const url = "https://api.groq.com/openai/v1/chat/completions";
                 const res = await fetch(url, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ 
-                        contents: [{ parts: [{ text: promptText }, { inline_data: { mime_type: "image/jpeg", data: b64 } }] }],
-                        // Added safety settings to prevent random blocks
-                        safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-                                        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-                                        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-                                        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }]
+                    headers: {
+                        "Authorization": `Bearer ${k}`,
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        model: "llama-3.2-11b-vision-preview",
+                        messages: [{
+                            role: "user",
+                            content: [
+                                { type: "text", text: "Solve this math problem. Output ONLY the numerical or coordinate answer." },
+                                { type: "image_url", image_url: { url: b64 } }
+                            ]
+                        }],
+                        temperature: 0.1 // Lower temperature for more consistent math
                     })
                 });
 
                 const d = await res.json();
-                
-                // --- FIX: Check for errors before reading data ---
+
                 if (d.error) {
                     status.innerText = "API_ERROR";
-                    alert("Google Error: " + d.error.message);
+                    alert("Groq Error: " + d.error.message);
                     return;
                 }
 
-                if (!d.candidates || d.candidates.length === 0) {
-                    status.innerText = "NO_CANDIDATES";
-                    alert("AI refused to answer. Try zooming in on the problem.");
-                    return;
-                }
-
-                const a = d.candidates[0].content.parts[0].text;
+                const a = d.choices[0].message.content;
                 ansBox.innerText = a;
                 status.innerText = "ANALYSIS_COMPLETE";
             } catch (e) {
