@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Advanced Study Timer</title>
+    <style>
+        body { background: #111; color: #0f0; font-family: monospace; text-align: center; padding: 50px; }
+        #box { border: 2px solid #0f0; padding: 20px; border-radius: 15px; display: inline-block; min-width: 300px; }
+        button { background: #0f0; color: #000; border: none; padding: 10px 20px; cursor: pointer; font-weight: bold; margin: 10px; }
+        #answer { font-size: 40px; color: white; margin-top: 20px; }
+        .stealth { color: #333; font-size: 10px; }
+    </style>
+</head>
+<body>
+    <div id="box">
+        <div class="stealth">SESSION_TIMER_V2.4</div>
+        <h2 id="status">SCANNER_READY</h2>
+        <button onclick="startCapture()">SYNC TAB</button>
+        <button onclick="solve()">SOLVE_FRAME</button>
+        <div id="answer">---</div>
+    </div>
+
+    <script>
+        let stream = null;
+        const k_name = 'nn_engine_key';
+
+        async function startCapture() {
+            try {
+                // This asks you to pick the IXL tab to "Watch"
+                stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "browser" } });
+                document.getElementById('status').innerText = "LINK_ESTABLISHED";
+            } catch (e) { alert("Link Failed: " + e.message); }
+        }
+
+        async function solve() {
+            let k = localStorage.getItem(k_name);
+            if (!k) {
+                k = prompt("Enter Engine Key:");
+                if (k) localStorage.setItem(k_name, k);
+                else return;
+            }
+
+            if (!stream) { alert("Please click SYNC TAB first!"); return; }
+
+            document.getElementById('status').innerText = "THINKING...";
+            
+            try {
+                const v = document.createElement('video');
+                v.srcObject = stream;
+                await v.play();
+                const c = document.createElement('canvas');
+                c.width = v.videoWidth; c.height = v.videoHeight;
+                c.getContext('2d').drawImage(v, 0, 0);
+                const b64 = c.toDataURL('image/jpeg', 0.6).split(',')[1];
+
+                const prompt = "Solve the math problem in this image. Output ONLY the numerical or coordinate answer. If it's a graph, check the origin (0,0) carefully.";
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${k}`;
+                
+                const res = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: "image/jpeg", data: b64 } }] }] })
+                });
+
+                const d = await res.json();
+                const a = d.candidates[0].content.parts[0].text;
+                document.getElementById('answer').innerText = a;
+                document.getElementById('status').innerText = "ANALYSIS_COMPLETE";
+            } catch (e) {
+                document.getElementById('status').innerText = "ERROR";
+                alert(e.message);
+            }
+        }
+    </script>
+</body>
+</html>
