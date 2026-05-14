@@ -4,16 +4,18 @@
     <title>Advanced Study Timer</title>
     <style>
         body { background: #111; color: #0f0; font-family: monospace; text-align: center; padding: 50px; }
-        #box { border: 2px solid #0f0; padding: 20px; border-radius: 15px; display: inline-block; min-width: 300px; }
-        button { background: #0f0; color: #000; border: none; padding: 10px 20px; cursor: pointer; font-weight: bold; margin: 10px; }
-        #answer { font-size: 40px; color: white; margin-top: 20px; }
-        .stealth { color: #333; font-size: 10px; }
+        #box { border: 2px solid #0f0; padding: 20px; border-radius: 15px; display: inline-block; min-width: 320px; box-shadow: 0 0 20px #000; }
+        button { background: #0f0; color: #000; border: none; padding: 12px 24px; cursor: pointer; font-weight: bold; margin: 10px; border-radius: 5px; transition: 0.3s; }
+        button:hover { background: #0c0; transform: scale(1.05); }
+        #answer { font-size: 42px; color: white; margin-top: 20px; font-weight: bold; min-height: 50px; }
+        .stealth { color: #333; font-size: 10px; margin-bottom: 10px; }
+        #status { color: #888; font-size: 14px; }
     </style>
 </head>
 <body>
     <div id="box">
-        <div class="stealth">SESSION_TIMER_V2.4</div>
-        <h2 id="status">SCANNER_READY</h2>
+        <div class="stealth">CORE_ENGINE_V2.1</div>
+        <div id="status">SCANNER_READY</div>
         <button onclick="startCapture()">SYNC TAB</button>
         <button onclick="solve()">SOLVE_FRAME</button>
         <div id="answer">---</div>
@@ -25,7 +27,6 @@
 
         async function startCapture() {
             try {
-                // This asks you to pick the IXL tab to "Watch"
                 stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "browser" } });
                 document.getElementById('status').innerText = "LINK_ESTABLISHED";
             } catch (e) { alert("Link Failed: " + e.message); }
@@ -39,9 +40,11 @@
                 else return;
             }
 
-            if (!stream) { alert("Please click SYNC TAB first!"); return; }
+            if (!stream) { alert("Click SYNC TAB first!"); return; }
 
-            document.getElementById('status').innerText = "THINKING...";
+            const status = document.getElementById('status');
+            const ansBox = document.getElementById('answer');
+            status.innerText = "THINKING...";
             
             try {
                 const v = document.createElement('video');
@@ -52,22 +55,43 @@
                 c.getContext('2d').drawImage(v, 0, 0);
                 const b64 = c.toDataURL('image/jpeg', 0.6).split(',')[1];
 
-                const prompt = "Solve the math problem in this image. Output ONLY the numerical or coordinate answer. If it's a graph, check the origin (0,0) carefully.";
+                const promptText = "Solve this math problem. Output ONLY the answer. For graphs, trace axes from (0,0) carefully.";
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${k}`;
                 
                 const res = await fetch(url, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: "image/jpeg", data: b64 } }] }] })
+                    body: JSON.stringify({ 
+                        contents: [{ parts: [{ text: promptText }, { inline_data: { mime_type: "image/jpeg", data: b64 } }] }],
+                        // Added safety settings to prevent random blocks
+                        safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                                        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                                        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                                        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }]
+                    })
                 });
 
                 const d = await res.json();
+                
+                // --- FIX: Check for errors before reading data ---
+                if (d.error) {
+                    status.innerText = "API_ERROR";
+                    alert("Google Error: " + d.error.message);
+                    return;
+                }
+
+                if (!d.candidates || d.candidates.length === 0) {
+                    status.innerText = "NO_CANDIDATES";
+                    alert("AI refused to answer. Try zooming in on the problem.");
+                    return;
+                }
+
                 const a = d.candidates[0].content.parts[0].text;
-                document.getElementById('answer').innerText = a;
-                document.getElementById('status').innerText = "ANALYSIS_COMPLETE";
+                ansBox.innerText = a;
+                status.innerText = "ANALYSIS_COMPLETE";
             } catch (e) {
-                document.getElementById('status').innerText = "ERROR";
-                alert(e.message);
+                status.innerText = "ENGINE_CRASH";
+                alert("Crash: " + e.message);
             }
         }
     </script>
